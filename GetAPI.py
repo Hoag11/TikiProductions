@@ -3,18 +3,20 @@ from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 import pandas as pd
 import re
-import random
 from bs4 import BeautifulSoup
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import logging
 
-# 1. Kết nối đến MongoDB
+# 1. Cấu hình logging để ghi lại log vào file
+logging.basicConfig(filename='product_log.txt', level=logging.INFO, format='%(asctime)s - %(message)s')
+
+# 2. Kết nối đến MongoDB
 uri = "mongodb+srv://hoag11:111204@cluster0.8ef9n.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 client = MongoClient(uri, server_api=ServerApi('1'))
 db = client['TikiProductions']
 collection = db['Productions']
 
 
-# 2. Hàm chuẩn hóa mô tả sản phẩm
+# 3. Hàm chuẩn hóa mô tả sản phẩm
 def normalize_description(description):
     soup = BeautifulSoup(description, "html.parser")
     description = soup.get_text()
@@ -24,12 +26,12 @@ def normalize_description(description):
     return description
 
 
-# 3. Đọc danh sách ID sản phẩm từ file CSV
+# 4. Đọc danh sách ID sản phẩm từ file CSV
 csv_file_path = "products-0-200000(in).csv"
 product_ids_df = pd.read_csv(csv_file_path)
 
 
-# 4. Gửi yêu cầu API và lưu dữ liệu vào MongoDB
+# 5. Gửi yêu cầu API và lưu dữ liệu vào MongoDB
 def fetch_and_save_product_data(product_id):
     # Kiểm tra nếu sản phẩm với ID này đã tồn tại trong MongoDB
     if collection.find_one({"_id": str(product_id)}):
@@ -54,24 +56,13 @@ def fetch_and_save_product_data(product_id):
             data['_id'] = str(product_id)  # Sử dụng ID sản phẩm làm _id
             collection.insert_one(data)
             print(f"Sản phẩm {product_id} đã được lưu vào MongoDB.")
+
+            # Ghi log sản phẩm vừa thêm
+            logging.info(f"Sản phẩm {product_id} đã được thêm vào database.")
         else:
             print(f"Lỗi khi lấy dữ liệu sản phẩm {product_id}. Mã trạng thái: {response.status_code}")
     except Exception as e:
         print(f"Lỗi khi lấy dữ liệu sản phẩm {product_id}: {e}")
 
-
-# 5. Chạy đa luồng để xử lý nhiều yêu cầu đồng thời
-def main():
-    num_threads = 5  # Sử dụng 5 luồng để tăng tốc độ xử lý
-    with ThreadPoolExecutor(max_workers=num_threads) as executor:
-        futures = [executor.submit(fetch_and_save_product_data, product_id) for product_id in product_ids_df['id']]
-
-        for future in as_completed(futures):
-            try:
-                future.result()
-            except Exception as exc:
-                print(f"Lỗi xảy ra: {exc}")
-
-
-if __name__ == "__main__":
-    main()
+for product_id in product_ids_df['id']:
+    fetch_and_save_product_data(product_id)
