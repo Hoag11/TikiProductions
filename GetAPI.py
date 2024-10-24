@@ -1,17 +1,23 @@
 import requests
 from pymongo.mongo_client import MongoClient
-from pymongo.server_api import ServerApi
 import pandas as pd
 import re
 from bs4 import BeautifulSoup
 import logging
 
-# 1. Cấu hình logging để ghi lại log vào file
+# 1. Cấu hình logging để ghi lại log thành công và log lỗi vào file khác nhau
 logging.basicConfig(filename='product_log.txt', level=logging.INFO, format='%(asctime)s - %(message)s')
 
+# Logger cho các lỗi
+error_logger = logging.getLogger('error_logger')
+error_handler = logging.FileHandler('error_log.txt')
+error_handler.setLevel(logging.ERROR)
+error_format = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+error_handler.setFormatter(error_format)
+error_logger.addHandler(error_handler)
+
 # 2. Kết nối đến MongoDB
-uri = "mongodb+srv://hoag11:111204@cluster0.8ef9n.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
-client = MongoClient(uri, server_api=ServerApi('1'))
+client = MongoClient("mongodb://localhost:27017/")
 db = client['TikiProductions']
 collection = db['Productions']
 
@@ -57,12 +63,19 @@ def fetch_and_save_product_data(product_id):
             collection.insert_one(data)
             print(f"Sản phẩm {product_id} đã được lưu vào MongoDB.")
 
-            # Ghi log sản phẩm vừa thêm
+            # Ghi log sản phẩm vừa thêm thành công
             logging.info(f"Sản phẩm {product_id} đã được thêm vào database.")
         else:
-            print(f"Lỗi khi lấy dữ liệu sản phẩm {product_id}. Mã trạng thái: {response.status_code}")
-    except Exception as e:
-        print(f"Lỗi khi lấy dữ liệu sản phẩm {product_id}: {e}")
+            error_msg = f"Lỗi khi lấy dữ liệu sản phẩm {product_id}. Mã trạng thái: {response.status_code}"
+            print(error_msg)
+            error_logger.error(error_msg)
 
+    except Exception as e:
+        error_msg = f"Lỗi khi lấy dữ liệu sản phẩm {product_id}: {e}"
+        print(error_msg)
+        error_logger.error(error_msg)
+
+
+# 6. Chạy tuần tự từng sản phẩm
 for product_id in product_ids_df['id']:
     fetch_and_save_product_data(product_id)
